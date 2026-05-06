@@ -4,7 +4,7 @@ Tags: aws, cognito, login, sso, mfa
 Requires at least: 6.7
 Tested up to: 6.9
 Requires PHP: 8.1
-Stable tag: 2.2.0
+Stable tag: 2.2.1
 License: MIT
 License URI: https://mit-license.org/
 Text Domain: gatey
@@ -203,6 +203,10 @@ This shared component handles WPSuite workspace linking, licence validation, and
 We maintain a fork of the AWS Amplify Authenticator (with Edit Account, Setup TOTP, etc.) and any additional paid-only screens and services in a private repository. Those files are not part of this public source.
 
 == Changelog ==
+
+= 2.2.1 =
+* Updated project dependencies.
+* Improved site settings saving so global reCAPTCHA settings are no longer overwritten accidentally.
 
 = 2.2.0 =
 * Compatibility: Updated Gatey admin and block packages for TypeScript 6 and newer WordPress typings.
@@ -518,6 +522,9 @@ Authenticator block: added optional “Signing in”, “Signing out” and “R
 Initial release.
 
 == Upgrade Notice ==
+
+= 2.2.1 =
+This release updates dependencies and improves site settings persistence so saving Gatey settings no longer overwrites the shared global reCAPTCHA configuration unintentionally.
 
 = 2.2.0 =
 Recommended compatibility update. Aligns Gatey admin and blocks with TypeScript 6 and newer WordPress typings, and improves consistency of help-drawer behavior across nested settings editors.
