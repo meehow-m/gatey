@@ -3,9 +3,9 @@
   "description": "Dependencies for Gatey",
   "type": "wordpress-plugin",
   "require": {
-    "uqi/cognito-token": "^1.1"
+    "firebase/php-jwt": "^7.0"
   },
-  "license": "gpl",
+  "license": "MIT",
   "authors": [
     {
       "name": "Smart Cloud Solutions Inc.",
@@ -13,7 +13,7 @@
     }
   ],
   "support": {
-    "issues": "https://github.com/smartcloudsol/wpsuite-gatey/issues",
-    "source": "https://github.com/smartcloudsol/wpsuite-gatey/"
+    "issues": "https://github.com/smartcloudsol/gatey/issues",
+    "source": "https://github.com/smartcloudsol/gatey/"
   }
 }

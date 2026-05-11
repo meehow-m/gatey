@@ -12,7 +12,6 @@ use Exception;
 use WP_REST_Request;
 use WP_REST_Response;
 use WP_Error;
-use UQI\Cognito\Tokens\CognitoTokenVerifier;
 use SmartCloud\WPSuite\Gatey\Logger;
 
 if (!defined('ABSPATH')) {
@@ -97,7 +96,10 @@ class Admin
         add_filter('parent_file', array($this, 'highlightMenu'));
         add_filter('submenu_file', array($this, 'highlightSubmenu'));
 
-        if (isset($_GET['post_type'], $_GET['s']) && $_GET['post_type'] === 'wp_block' && $_GET['s'] === 'gatey') {
+        $post_type = filter_input(INPUT_GET, 'post_type', FILTER_SANITIZE_FULL_SPECIAL_CHARS);
+        $search = filter_input(INPUT_GET, 's', FILTER_SANITIZE_FULL_SPECIAL_CHARS);
+
+        if ('wp_block' === $post_type && 'gatey' === $search) {
             add_filter('manage_edit-wp_block_columns', array($this, 'addShortcodeColumn'), 20);
             add_action('manage_wp_block_posts_custom_column', array($this, 'renderShortcodeColumn'), 10, 2);
             add_action('admin_enqueue_scripts', array($this, 'copyShortcode'));
@@ -317,10 +319,6 @@ class Admin
             return new WP_REST_Response(array('success' => false, 'message' => __('Invalid token.', 'gatey')), 401);
         }
 
-        // Check if the $clientId is the same as the one in the token ($t['aud']) and the $poolId is the same as the one in the token ($t['iss'])
-        if ($clientId != $t['aud'] || "https://cognito-idp.$region.amazonaws.com/$poolId" != $t['iss']) {
-            return new WP_REST_Response(array('success' => false, 'message' => __('Invalid token.', 'gatey')), 401);
-        }
         $updated = false;
         $getByEmail = array_key_exists('email', $t);
         $user = $getByEmail ? get_user_by('email', $t['email']) : get_user_by('login', $t['cognito:username']);

@@ -6,7 +6,7 @@
  * Requires at least: 6.7
  * Tested up to:      6.9
  * Requires PHP:      8.1
- * Version:           2.2.1
+ * Version:           2.2.2
  * Author:            Smart Cloud Solutions Inc.
  * Author URI:        https://smart-cloud-solutions.com
  * License:           MIT
@@ -18,7 +18,7 @@
 
 namespace SmartCloud\WPSuite\Gatey;
 
-const VERSION = '2.2.1';
+const VERSION = '2.2.2';
 
 if (!defined('ABSPATH')) {
     exit;
@@ -492,14 +492,19 @@ __gateyGlobal.Gatey = __gateyGlobal.WpSuite.plugins.gatey;
      */
     private function includes(): void
     {
-        // Composer autoloader if shipped.
-        if (file_exists(GATEY_PATH . 'vendor/autoload.php') && !class_exists('\SmartCloud\WPSuite\Gatey\Admin')) {
+        // Composer autoloader
+        if (file_exists(GATEY_PATH . 'vendor/autoload.php')) {
             require_once GATEY_PATH . 'vendor/autoload.php';
         }
 
         // Logger class
         if (file_exists(GATEY_PATH . 'admin/logger.php')) {
             require_once GATEY_PATH . 'admin/logger.php';
+        }
+
+        // Cognito JWT verifier
+        if (file_exists(GATEY_PATH . 'admin/cognito-token-verifier.php')) {
+            require_once GATEY_PATH . 'admin/cognito-token-verifier.php';
         }
 
         // Hub admin classes

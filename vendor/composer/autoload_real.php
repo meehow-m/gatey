@@ -31,20 +31,7 @@ class ComposerAutoloaderInit27ec2499284529625e5955524d0b8e1e
         require __DIR__ . '/autoload_static.php';
         call_user_func(\Composer\Autoload\ComposerStaticInit27ec2499284529625e5955524d0b8e1e::getInitializer($loader));
 
-        $loader->setClassMapAuthoritative(true);
         $loader->register(true);
-
-        $filesToLoad = \Composer\Autoload\ComposerStaticInit27ec2499284529625e5955524d0b8e1e::$files;
-        $requireFile = \Closure::bind(static function ($fileIdentifier, $file) {
-            if (empty($GLOBALS['__composer_autoload_files'][$fileIdentifier])) {
-                $GLOBALS['__composer_autoload_files'][$fileIdentifier] = true;
-
-                require $file;
-            }
-        }, null, null);
-        foreach ($filesToLoad as $fileIdentifier => $file) {
-            $requireFile($fileIdentifier, $file);
-        }
 
         return $loader;
     }

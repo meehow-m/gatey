@@ -4,7 +4,7 @@ Tags: aws, cognito, login, sso, mfa
 Requires at least: 6.7
 Tested up to: 6.9
 Requires PHP: 8.1
-Stable tag: 2.2.1
+Stable tag: 2.2.2
 License: MIT
 License URI: https://mit-license.org/
 Text Domain: gatey
@@ -203,6 +203,13 @@ This shared component handles WPSuite workspace linking, licence validation, and
 We maintain a fork of the AWS Amplify Authenticator (with Edit Account, Setup TOTP, etc.) and any additional paid-only screens and services in a private repository. Those files are not part of this public source.
 
 == Changelog ==
+
+= 2.2.2 =
+* Compatibility: Replaced the previous Cognito token verification dependency with a lightweight Gatey-owned verifier based on `firebase/php-jwt`.
+* Compatibility: JWKS keys are now fetched through the WordPress HTTP API instead of relying on PHP URL file access, improving support for hosts where `allow_url_fopen` is disabled.
+* Reliability: Added WordPress transient caching for Cognito JWKS responses and automatic refresh on key mismatch, improving resilience during Cognito signing key rotation.
+* Security/maintenance: Kept cryptographic JWT verification in a maintained third-party library while moving the Cognito-specific validation logic into Gatey.
+* Internal cleanup: Improved token verification error handling and WordPress.org plugin-check compatibility.
 
 = 2.2.1 =
 * Updated project dependencies.
@@ -522,6 +529,9 @@ Authenticator block: added optional “Signing in”, “Signing out” and “R
 Initial release.
 
 == Upgrade Notice ==
+
+= 2.2.2 =
+Recommended update. Improves Cognito JWT verification compatibility on restrictive hosting environments and replaces a small upstream dependency with Gatey-owned WordPress-compatible verification logic.
 
 = 2.2.1 =
 This release updates dependencies and improves site settings persistence so saving Gatey settings no longer overwrites the shared global reCAPTCHA configuration unintentionally.
