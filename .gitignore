@@ -1,7 +1,7 @@
 *.zip
-/gatey*/node_modules
-/gatey-admin/public
-/**/paid-features/
-/**/scripts/
+/admin/public
+/**/node_modules
+/**/paid-features
+/**/scripts
 /**/publish
 /**/index.html
