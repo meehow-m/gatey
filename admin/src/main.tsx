@@ -1,0 +1,2082 @@
+import {
+  type AuthMethod,
+  type PasswordlessSettings,
+  type SignUpAttribute,
+} from "@smart-cloud/aws-amplify-ui";
+import {
+  Accordion,
+  ActionIcon,
+  Alert,
+  Box,
+  Button,
+  Card,
+  Checkbox,
+  DEFAULT_THEME,
+  Fieldset,
+  Group,
+  HoverCard,
+  MultiSelect,
+  NavLink,
+  NumberInput,
+  Select,
+  Stack,
+  Switch,
+  Table,
+  Tabs,
+  Text,
+  TextInput,
+  Title,
+} from "@mantine/core";
+import { useDisclosure, useMediaQuery } from "@mantine/hooks";
+import { notifications } from "@mantine/notifications";
+import {
+  getGateyPlugin,
+  getStoreSelect,
+  sanitizeAuthenticatorConfig,
+  TEXT_DOMAIN,
+  type AuthenticatorConfig,
+  type RoleMapping,
+  type Settings,
+  type Store,
+} from "@smart-cloud/gatey-core";
+import {
+  IconAlertCircle,
+  IconApi,
+  IconCheck,
+  IconChevronRight,
+  IconCircleNumber2,
+  IconExclamationCircle,
+  IconForms,
+  IconHelp,
+  IconInfoCircle,
+  IconLock,
+  IconLogin,
+  IconPlus,
+  IconSettings,
+  IconSocial,
+  IconStar,
+  IconUsersGroup,
+  IconX,
+} from "@tabler/icons-react";
+import { useQuery } from "@tanstack/react-query";
+import apiFetch from "@wordpress/api-fetch";
+import { produce } from "immer";
+import { lazy, Suspense } from "react";
+
+import { __experimentalHeading as Heading } from "@wordpress/components";
+import { useSelect } from "@wordpress/data";
+import { __ } from "@wordpress/i18n";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import DocSidebar from "./DocSidebar";
+import { signUpAttributes } from "./index";
+import { NoRegistrationRequiredBanner } from "./noregistration";
+import { OnboardingBanner } from "./onboarding";
+
+import {
+  getWpSuite,
+  type SiteSettings,
+  type SubscriptionType,
+} from "@smart-cloud/wpsuite-core";
+
+import "jquery";
+
+import classes from "./main.module.css";
+
+interface Account {
+  accountId: string;
+  name: string;
+  owner: string;
+  ownerEmail: string;
+  customerId?: string;
+  customer: unknown;
+}
+
+export interface Site {
+  accountId: string;
+  siteId: string;
+  siteKey?: string;
+  name: string;
+  domain: string;
+  subscriptionType?: SubscriptionType;
+  subscription?: {
+    id: string;
+    active: boolean;
+    currentPeriodStart: number;
+    currentPeriodEnd: number;
+    cancelAtPeriodEnd: boolean;
+    subscriptionScheduleId?: string;
+    nextSubscriptionType?: SubscriptionType;
+  };
+  settings: AuthenticatorConfig;
+  account?: Account;
+}
+
+export interface SettingsEditorProps {
+  apiUrl: string;
+  config: AuthenticatorConfig;
+  accountId: string;
+  siteId: string;
+  siteKey: string | undefined;
+  onSave: (config: AuthenticatorConfig) => void;
+  InfoLabel: (props: {
+    text: string;
+    scrollToId: string;
+    onOpen: (targetScrollToId: string) => void;
+  }) => JSX.Element;
+  openInfo: (targetScrollToId: string) => void;
+}
+
+const wpsuite = getWpSuite();
+
+let wpSuiteInstalled: boolean = false;
+let wpRestUrl: string | undefined;
+let wpSuiteSiteSettings: SiteSettings = {} as SiteSettings;
+if (wpsuite) {
+  wpSuiteInstalled = true;
+  wpSuiteSiteSettings = wpsuite.siteSettings;
+  wpRestUrl = wpsuite.restUrl;
+}
+
+const ApiSettingsEditor = lazy(
+  () =>
+    import(
+      process.env.WPSUITE_PREMIUM
+        ? "./paid-features/ApiSettingsEditor"
+        : "./free-features/NullEditor"
+    ),
+);
+const CustomFieldsEditor = lazy(
+  () =>
+    import(
+      process.env.WPSUITE_PREMIUM
+        ? "./paid-features/CustomFieldsEditor"
+        : "./free-features/NullEditor"
+    ),
+);
+const CustomProvidersEditor = lazy(
+  () =>
+    import(
+      process.env.WPSUITE_PREMIUM
+        ? "./paid-features/CustomProvidersEditor"
+        : "./free-features/NullEditor"
+    ),
+);
+
+const SettingsTitle = ({ settings }: { settings: Settings }) => {
+  const isMobile = useMediaQuery(
+    `(max-width: ${DEFAULT_THEME.breakpoints.sm})`,
+  );
+  return (
+    <Card p="sm" withBorder mt="md" maw={1280}>
+      <Group
+        align="flex-start"
+        style={{
+          flexDirection: "column",
+          width: "100%",
+        }}
+      >
+        <Heading
+          level={1}
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: "8px",
+            color: "#218BE6",
+          }}
+        >
+          {__(
+            isMobile ? "Gatey" : "Gatey - Login & SSO with Amazon Cognito",
+            TEXT_DOMAIN,
+          )}
+        </Heading>
+        <Text>
+          This interface allows you to configure how your WordPress installation
+          connects to Amazon Cognito.
+        </Text>
+        <Text>
+          You can set up your <strong>user pool</strong>, define supported{" "}
+          <strong>login mechanisms</strong>, customize{" "}
+          <strong>sign-in and redirect behavior</strong>, and choose whether to
+          replace
+          <HoverCard>
+            <HoverCard.Target>
+              <ActionIcon variant="subtle" size="xs">
+                <IconInfoCircle size={16} />
+              </ActionIcon>
+            </HoverCard.Target>
+            <HoverCard.Dropdown maw={300} style={{ zIndex: 10000 }}>
+              <Text size="sm">
+                Replacing the default login is optional — for example, if your
+                WordPress site is used only for backend content editing and the
+                public site is statically generated, you can still fully
+                leverage Gatey for your frontend.
+              </Text>
+            </HoverCard.Dropdown>
+          </HoverCard>{" "}
+          the default WordPress login page with a Cognito-based flow.
+        </Text>
+        <NoRegistrationRequiredBanner />
+        {!wpSuiteSiteSettings.siteId && (
+          <>
+            <Text c="dimmed" size="xs">
+              To use Pro features, please connect this WordPress site to a{" "}
+              <strong>WPSuite</strong> workspace. Go to the{" "}
+              <a href="?page=hub-for-wpsuiteio">
+                <strong>SmartCloud → Connect your Site to WPSuite</strong>
+              </a>{" "}
+              menu and complete the linking process.
+            </Text>
+          </>
+        )}
+        <OnboardingBanner settings={settings} />
+      </Group>
+    </Card>
+  );
+};
+
+interface WpPage {
+  slug: string;
+  title: { rendered: string };
+}
+
+interface NavigationOption {
+  value: string;
+  label: string;
+  icon: React.ReactNode;
+  disabled?: boolean;
+}
+
+interface Page {
+  path: string;
+  title: string;
+}
+
+interface MainProps {
+  nonce: string;
+  settings: Settings;
+  store: Store;
+}
+
+const production = process.env?.NODE_ENV === "production";
+
+const apiUrl =
+  !production || window.location.host === "dev.wpsuite.io"
+    ? "https://api.wpsuite.io/dev"
+    : "https://api.wpsuite.io";
+
+const configUrl =
+  !production || window.location.host === "dev.wpsuite.io"
+    ? "https://wpsuite.io/static/config/dev.json"
+    : "https://wpsuite.io/static/config/prod.json";
+
+const gatey = getGateyPlugin();
+
+const authMethodOptions: Array<{ label: string; value: AuthMethod }> = [
+  { label: "Password", value: "PASSWORD" },
+  { label: "Email OTP", value: "EMAIL_OTP" },
+  { label: "SMS OTP", value: "SMS_OTP" },
+  { label: "WebAuthn (Passkey)", value: "WEB_AUTHN" },
+];
+
+const passkeyPromptOptions = [
+  { label: "Always", value: "ALWAYS" },
+  { label: "Never", value: "NEVER" },
+];
+
+const normalizePasswordlessSettings = (
+  settings?: PasswordlessSettings,
+): PasswordlessSettings | undefined => {
+  if (!settings) {
+    return undefined;
+  }
+
+  const normalized: PasswordlessSettings = {};
+
+  if (settings.hiddenAuthMethods?.length) {
+    normalized.hiddenAuthMethods = settings.hiddenAuthMethods;
+  }
+
+  if (settings.preferredAuthMethod) {
+    normalized.preferredAuthMethod = settings.preferredAuthMethod;
+  }
+
+  if (typeof settings.passkeyRegistrationPrompts === "boolean") {
+    normalized.passkeyRegistrationPrompts = settings.passkeyRegistrationPrompts;
+  } else if (settings.passkeyRegistrationPrompts) {
+    const prompts = {
+      ...(settings.passkeyRegistrationPrompts.afterSignin
+        ? { afterSignin: settings.passkeyRegistrationPrompts.afterSignin }
+        : {}),
+      ...(settings.passkeyRegistrationPrompts.afterSignup
+        ? { afterSignup: settings.passkeyRegistrationPrompts.afterSignup }
+        : {}),
+    };
+
+    if (Object.keys(prompts).length) {
+      normalized.passkeyRegistrationPrompts = prompts;
+    }
+  }
+
+  return Object.keys(normalized).length ? normalized : undefined;
+};
+
+const getPasskeyPromptMode = (
+  passkeyRegistrationPrompts?: PasswordlessSettings["passkeyRegistrationPrompts"],
+): "enabled" | "disabled" | "custom" | null => {
+  if (passkeyRegistrationPrompts === true) {
+    return "enabled";
+  }
+  if (passkeyRegistrationPrompts === false) {
+    return "disabled";
+  }
+  if (passkeyRegistrationPrompts) {
+    return "custom";
+  }
+  return null;
+};
+
+type InfoLabelProps = {
+  text: string;
+  scrollToId: string;
+  onOpen: (scrollToId: string) => void;
+};
+
+function InfoLabel({ text, scrollToId, onOpen }: InfoLabelProps) {
+  return (
+    <Group align="center" gap="0.25rem">
+      {text}
+      <ActionIcon variant="subtle" onClick={() => onOpen(scrollToId)} size="sm">
+        <IconHelp size={14} />
+      </ActionIcon>
+    </Group>
+  );
+}
+
+const Main = (props: MainProps) => {
+  const { store, nonce, settings } = props;
+
+  const [currentConfig, setCurrentConfig] = useState<"default" | "secondary">(
+    "default",
+  );
+  const [navigationOptions, setNavigationOptions] =
+    useState<NavigationOption[]>();
+  const [wpRoles, setWpRoles] = useState<string[]>([]);
+  const [wpRolesLoaded, setWpRolesLoaded] = useState<boolean>(false);
+  const [pages, setPages] = useState<Page[]>([]);
+  const [scrollToId, setScrollToId] = useState<string>("");
+  const [accordionValue, setAccordionValue] = useState<string | null>("gatey");
+  const [accountId] = useState<string | undefined>(
+    wpSuiteSiteSettings.accountId,
+  );
+  const [siteId] = useState<string | undefined>(wpSuiteSiteSettings.siteId);
+  const [siteKey] = useState<string | undefined>(wpSuiteSiteSettings.siteKey);
+  const [opened, { open, close }] = useDisclosure(false);
+
+  const [site, setSite] = useState<Site | null>();
+
+  const [settingsFormData, setSettingsFormData] = useState<Settings>({
+    userPoolConfigurations: JSON.parse(
+      JSON.stringify(settings.userPoolConfigurations || {}),
+    ),
+    secondaryUserPoolDomains: settings.secondaryUserPoolDomains || "",
+    mappings: settings.mappings || [],
+    loginMechanisms: settings.loginMechanisms || [],
+    integrateWpLogin: settings.integrateWpLogin || false,
+    cookieExpiration: settings.cookieExpiration,
+    signInPage: settings.signInPage,
+    redirectSignIn: settings.redirectSignIn,
+    redirectSignOut: settings.redirectSignOut,
+    customTranslationsUrl: settings.customTranslationsUrl,
+    signUpAttributes: settings.signUpAttributes || [],
+    socialProviders: settings.socialProviders || [],
+    passwordlessSettings: normalizePasswordlessSettings(
+      settings.passwordlessSettings,
+    ),
+    hideSignUp: settings.hideSignUp || false,
+    enablePoweredBy: settings.enablePoweredBy || false,
+    debugLoggingEnabled: settings.debugLoggingEnabled || false,
+  });
+
+  const [resolvedConfig, setResolvedConfig] = useState<
+    AuthenticatorConfig | null | undefined
+  >(undefined);
+
+  const [formConfig, setFormConfig] = useState<AuthenticatorConfig>();
+
+  const [savingSettings, setSavingSettings] = useState<boolean>(false);
+  const [activePage, setActivePage] = useState<
+    | "user-pools"
+    | "general"
+    | "wordpress-login"
+    | "custom-fields"
+    | "custom-providers"
+    | "api-settings"
+  >("general");
+
+  // Add media query for responsive design
+  const isMobile = useMediaQuery(
+    `(max-width: ${DEFAULT_THEME.breakpoints.sm})`,
+  );
+
+  const decryptedConfig: AuthenticatorConfig | null = useSelect(
+    () => getStoreSelect(store)?.getConfig(),
+    [],
+  );
+
+  const loadSiteEnabled = !!accountId && !!siteId && !!siteKey;
+
+  useQuery({
+    queryKey: ["config"],
+    queryFn: async () => {
+      const response = await fetch(configUrl).catch((err) => {
+        return {
+          ok: true,
+          statusText: err.message,
+          json: async () => ({
+            config: "prod",
+            baseUrl: "https://wpsuite.io",
+            userPoolId: "us-east-1_G0wEwK9tt",
+            identityPoolId: "us-east-1:11e55c9a-b768-48a2-8a0c-c51f1e99c129",
+            appClientPlugin: "5e6fs3pk1k1ju7cgpnp7o7si8u",
+            awsRegion: "us-east-1",
+            pricingTable: "prctbl_1QA6TQFjw5MDUzy6c3fBSPGL",
+            stripePublicKey:
+              "pk_live_51OVeJwFjw5MDUzy6pwTbsMjcBZjZioihzLAtxQsF91u4lYJC4mtqrJddSskhz6OPbWS0tr8XL2G1AwJaXEpv9Rgn008dAz5TEr",
+            permissions: {
+              owner: [
+                "transfer-account",
+                "manage-account",
+                "manage-sites",
+                "manage-subscriptions",
+                "manage-billing",
+              ],
+              admin: [
+                "manage-account",
+                "manage-sites",
+                "manage-subscriptions",
+                "manage-billing",
+              ],
+              accountant: ["manage-billing"],
+            },
+          }),
+        };
+      });
+
+      if (!response.ok) {
+        console.error("Error loading configuration:", await response.json());
+        throw new Error(response.statusText);
+      }
+
+      const result = await response.json();
+      return result;
+    },
+  });
+
+  const {
+    data: siteRecord,
+    isError: isSiteError,
+    isPending: isSitePending,
+  } = useQuery({
+    queryKey: ["site", accountId, siteId],
+    queryFn: () => fetchSite(accountId!, siteId!, siteKey!),
+    enabled: loadSiteEnabled,
+  });
+
+  const clearCache = useCallback(
+    (subscriber: boolean) => {
+      if (wpSuiteInstalled && wpRestUrl && accountId && siteId && siteKey) {
+        fetch(wpRestUrl + "/update-site-settings", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "X-WP-Nonce": nonce,
+          },
+          body: JSON.stringify({
+            ...wpSuiteSiteSettings,
+            lastUpdate: new Date().getTime(),
+            subscriber,
+          }),
+          credentials: "same-origin",
+        });
+      }
+    },
+    [accountId, nonce, siteId, siteKey],
+  );
+
+  const handleConfigChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const { name, value } = e.target;
+    setSettingsFormData((prev) =>
+      produce(prev, (draft: Settings) => {
+        const parts = name.split(".");
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        let ref = draft.userPoolConfigurations as unknown as any;
+        while (parts.length > 1) ref = ref[parts.shift()!];
+        ref[parts[0]] =
+          parts[0] === "scopes" ? value.split(",").map((s) => s.trim()) : value;
+      }),
+    );
+  };
+
+  const handleMappingChange = useCallback(
+    (index: number, field: keyof RoleMapping, value: string) => {
+      const updatedMappings = settingsFormData.mappings.map((mapping, i) =>
+        i === index ? { ...mapping, [field]: value } : mapping,
+      );
+      setSettingsFormData({ ...settingsFormData, mappings: updatedMappings });
+    },
+    [settingsFormData],
+  );
+
+  const handleAddMapping = useCallback(() => {
+    setSettingsFormData({
+      ...settingsFormData,
+      mappings: [
+        ...settingsFormData.mappings,
+        { cognitoGroup: "", wordpressRole: "" },
+      ],
+    });
+  }, [settingsFormData]);
+
+  const handleDeleteMapping = useCallback(
+    (index: number) => {
+      const updatedMappings = settingsFormData.mappings.filter(
+        (_, i) => i !== index,
+      );
+      setSettingsFormData({ ...settingsFormData, mappings: updatedMappings });
+    },
+    [settingsFormData],
+  );
+
+  const handleIntegrationChange = useCallback(
+    (value: boolean) => {
+      setSettingsFormData({
+        ...settingsFormData,
+        integrateWpLogin: value,
+      });
+    },
+    [settingsFormData],
+  );
+
+  const updatePasswordlessSettings = useCallback(
+    (
+      updater: (
+        current?: PasswordlessSettings,
+      ) => PasswordlessSettings | undefined,
+    ) => {
+      setSettingsFormData({
+        ...settingsFormData,
+        passwordlessSettings: normalizePasswordlessSettings(
+          updater(settingsFormData.passwordlessSettings),
+        ),
+      });
+    },
+    [settingsFormData],
+  );
+
+  const handleUpdateSettings = useCallback(
+    async (e: React.FormEvent) => {
+      e.preventDefault();
+      setSavingSettings(true);
+      try {
+        const response = await fetch(gatey.restUrl + "/update-settings", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "X-WP-Nonce": nonce,
+          },
+          body: JSON.stringify(settingsFormData),
+          credentials: "same-origin",
+        });
+        if (response.ok) {
+          let message: string = __("Settings saved successfully.", TEXT_DOMAIN);
+          const target = e.target as typeof e.target & {
+            name: string;
+          };
+          switch (target.name) {
+            case "user-pools":
+              message = __(
+                "User pool settings saved successfully.",
+                TEXT_DOMAIN,
+              );
+              break;
+            case "general":
+              message = __("General settings saved successfully.", TEXT_DOMAIN);
+              break;
+            case "wordpress-login":
+              message = __(
+                "WordPress login settings saved successfully.",
+                TEXT_DOMAIN,
+              );
+              break;
+            default:
+              break;
+          }
+          notifications.show({
+            title: __("Settings saved", TEXT_DOMAIN),
+            message: message,
+            color: "green",
+            icon: <IconInfoCircle />,
+            className: classes["notification"],
+          });
+        } else {
+          const err = await response.json();
+          console.error("Failed to submit data", err);
+          notifications.show({
+            title: __("Error occured", TEXT_DOMAIN),
+            message: (err as Error).message,
+            color: "red",
+            icon: <IconAlertCircle />,
+            className: classes["notification"],
+          });
+        }
+      } catch (error) {
+        notifications.show({
+          title: __("Error occured", TEXT_DOMAIN),
+          message: (error as Error).message,
+          color: "red",
+          icon: <IconAlertCircle />,
+          className: classes["notification"],
+        });
+      } finally {
+        setSavingSettings(false);
+      }
+    },
+    [settingsFormData, nonce],
+  );
+
+  const openInfo = useCallback(
+    (targetScrollToId: string) => {
+      setScrollToId(targetScrollToId);
+      open();
+    },
+    [open],
+  );
+
+  const handleConfigSave = useCallback(
+    (config: AuthenticatorConfig) => {
+      setFormConfig({
+        ...sanitizeAuthenticatorConfig(config),
+        subscriptionType: formConfig?.subscriptionType,
+      });
+      clearCache(!!formConfig?.subscriptionType);
+    },
+    [clearCache, formConfig?.subscriptionType],
+  );
+
+  useEffect(() => {
+    queueMicrotask(() => {
+      if (isSiteError || !isSitePending || !loadSiteEnabled) {
+        setSite(isSiteError ? null : siteRecord ?? null);
+      }
+    });
+  }, [siteRecord, loadSiteEnabled, isSitePending, isSiteError]);
+
+  useEffect(() => {
+    queueMicrotask(() => {
+      if (site) {
+        setResolvedConfig({
+          ...sanitizeAuthenticatorConfig(site.settings ?? {}),
+          subscriptionType: site.subscriptionType,
+        });
+      } else {
+        if ((!accountId && !siteId) || isSiteError) {
+          setResolvedConfig(null);
+        }
+      }
+    });
+  }, [accountId, isSiteError, site, siteId]);
+
+  useEffect(() => {
+    apiFetch<WpPage[]>({
+      path: "/wp/v2/pages?status=publish&per_page=100&context=embed",
+    })
+      .then((pages) => {
+        setPages(
+          pages.map((p: { slug: string; title: { rendered: string } }) => ({
+            path: "/" + p.slug,
+            title: p.title.rendered,
+          })) as Page[],
+        );
+      })
+      .catch((error) => console.error("Error loading form:", error));
+  }, []);
+
+  const pageOptions = useMemo(
+    () => pages.map((p) => ({ label: p.title, value: p.path })),
+    [pages],
+  );
+
+  useEffect(() => {
+    if (nonce) {
+      if (settingsFormData.integrateWpLogin && !wpRolesLoaded) {
+        fetch(gatey.restUrl + "/get-roles", {
+          method: "GET",
+          headers: {
+            "X-WP-Nonce": nonce,
+          },
+          credentials: "same-origin",
+        })
+          .then((response) => response.json())
+          .then((response) => {
+            setWpRoles(response as string[]);
+            setWpRolesLoaded(true);
+          })
+          .catch((error) => console.error("Error loading form:", error));
+      }
+    }
+  }, [settingsFormData.integrateWpLogin, nonce, wpRolesLoaded]);
+
+  // Navigation options grouped by free and pro features
+  useEffect(() => {
+    queueMicrotask(() => {
+      const paidSettingsDisabled =
+        decryptedConfig && accountId && siteId && siteKey
+          ? !decryptedConfig
+          : !resolvedConfig;
+      setNavigationOptions([
+        {
+          value: "general",
+          label: __("General", TEXT_DOMAIN),
+          icon: <IconSettings size={16} stroke={1.5} />,
+        },
+        {
+          value: "user-pools",
+          label: __("User Pools", TEXT_DOMAIN),
+          icon: <IconUsersGroup size={16} stroke={1.5} />,
+        },
+        {
+          value: "wordpress-login",
+          label: __("WordPress Login", TEXT_DOMAIN),
+          icon: <IconLogin size={16} stroke={1.5} />,
+        },
+        {
+          value: "api-settings",
+          label: __("API Settings", TEXT_DOMAIN),
+          icon: <IconApi size={16} stroke={1.5} />,
+          disabled: paidSettingsDisabled,
+        },
+        {
+          value: "custom-fields",
+          label: __("Custom Fields", TEXT_DOMAIN),
+          icon: <IconForms size={16} stroke={1.5} />,
+          disabled: paidSettingsDisabled,
+        },
+        {
+          value: "custom-providers",
+          label: __("Custom Providers", TEXT_DOMAIN),
+          icon: <IconSocial size={16} stroke={1.5} />,
+          disabled: paidSettingsDisabled,
+        },
+      ]);
+      if (paidSettingsDisabled) {
+        setActivePage("general");
+      }
+    });
+  }, [accountId, decryptedConfig, resolvedConfig, siteId, siteKey]);
+
+  useEffect(() => {
+    queueMicrotask(() => {
+      if (resolvedConfig !== undefined) {
+        const fc = (resolvedConfig ?? decryptedConfig) as AuthenticatorConfig;
+        setFormConfig(fc);
+      }
+    });
+  }, [resolvedConfig, decryptedConfig]);
+
+  useEffect(() => {
+    if (resolvedConfig !== undefined) {
+      if (
+        resolvedConfig !== null &&
+        ((!!resolvedConfig.subscriptionType &&
+          !wpSuiteSiteSettings.subscriber) ||
+          (!resolvedConfig.subscriptionType && wpSuiteSiteSettings.subscriber))
+      ) {
+        const subscriber = !!resolvedConfig.subscriptionType;
+        wpSuiteSiteSettings.subscriber = subscriber;
+        clearCache(subscriber);
+      }
+    }
+  }, [clearCache, resolvedConfig]);
+
+  return (
+    <div className={classes["wpc-container"]}>
+      <DocSidebar
+        opened={opened}
+        close={close}
+        page={activePage as never}
+        scrollToId={scrollToId}
+      />
+      <SettingsTitle settings={settingsFormData} />
+      <Group
+        align="flex-start"
+        mt="lg"
+        style={{
+          flexDirection: isMobile ? "column" : "row",
+          width: "100%",
+        }}
+      >
+        {isMobile ? (
+          <Accordion
+            w="100%"
+            value={accordionValue}
+            onChange={setAccordionValue}
+            variant="separated"
+          >
+            <Accordion.Item value="gatey">
+              <Accordion.Control>
+                <Text fw={600}>{__("Gatey", TEXT_DOMAIN)}</Text>
+              </Accordion.Control>
+              <Accordion.Panel>
+                <Stack gap="xs">
+                  {navigationOptions?.slice(0, 3).map((item) => (
+                    <NavLink
+                      key={item.value}
+                      label={item.label}
+                      leftSection={item.icon}
+                      rightSection={
+                        activePage === item.value ? (
+                          <IconChevronRight size={16} stroke={1.5} />
+                        ) : null
+                      }
+                      active={activePage === item.value}
+                      onClick={() => {
+                        setActivePage(
+                          item.value as
+                            | "general"
+                            | "user-pools"
+                            | "wordpress-login"
+                            | "custom-fields"
+                            | "custom-providers"
+                            | "api-settings",
+                        );
+                      }}
+                      disabled={item.disabled}
+                    />
+                  ))}
+                </Stack>
+              </Accordion.Panel>
+            </Accordion.Item>
+            <Accordion.Item value="pro-features">
+              <Accordion.Control>
+                <Text fw={600}>{__("Pro Features", TEXT_DOMAIN)}</Text>
+              </Accordion.Control>
+              <Accordion.Panel>
+                <Stack gap="xs">
+                  {navigationOptions?.slice(3).map((item) => (
+                    <NavLink
+                      key={item.value}
+                      label={item.label}
+                      leftSection={item.icon}
+                      rightSection={
+                        item.disabled ||
+                        !(formConfig ?? decryptedConfig)?.subscriptionType ? (
+                          <IconLock size={14} stroke={1.5} />
+                        ) : activePage === item.value ? (
+                          <IconChevronRight size={16} stroke={1.5} />
+                        ) : null
+                      }
+                      active={activePage === item.value}
+                      onClick={() => {
+                        if (!item.disabled) {
+                          setActivePage(
+                            item.value as
+                              | "general"
+                              | "user-pools"
+                              | "wordpress-login"
+                              | "custom-fields"
+                              | "custom-providers"
+                              | "api-settings",
+                          );
+                        }
+                      }}
+                      disabled={item.disabled}
+                    />
+                  ))}
+                </Stack>
+              </Accordion.Panel>
+            </Accordion.Item>
+          </Accordion>
+        ) : (
+          <Card w={240} p="md" withBorder style={{ flexShrink: 0 }}>
+            <Stack gap="lg">
+              <Box>
+                <Text size="sm" fw={600} mb="xs" c="dimmed">
+                  {__("Gatey", TEXT_DOMAIN)}
+                </Text>
+                <Stack gap={0}>
+                  {navigationOptions
+                    ?.slice(0, 3)
+                    .map((item) => (
+                      <NavLink
+                        key={item.value}
+                        label={item.label}
+                        leftSection={item.icon}
+                        rightSection={
+                          activePage === item.value ? (
+                            <IconChevronRight size={16} stroke={1.5} />
+                          ) : null
+                        }
+                        active={activePage === item.value}
+                        onClick={() =>
+                          setActivePage(
+                            item.value as
+                              | "general"
+                              | "user-pools"
+                              | "wordpress-login"
+                              | "custom-fields"
+                              | "custom-providers"
+                              | "api-settings",
+                          )
+                        }
+                        disabled={item.disabled}
+                      />
+                    ))}
+                </Stack>
+              </Box>
+              <Box>
+                <Text size="sm" fw={600} mb="xs" c="dimmed">
+                  {__("Pro Features", TEXT_DOMAIN)}
+                </Text>
+                <Stack gap={0}>
+                  {navigationOptions?.slice(3).map((item) => (
+                    <NavLink
+                      key={item.value}
+                      label={item.label}
+                      leftSection={item.icon}
+                      rightSection={
+                        item.disabled ||
+                        !(formConfig ?? decryptedConfig)?.subscriptionType ? (
+                          <IconLock size={14} stroke={1.5} />
+                        ) : activePage === item.value ? (
+                          <IconChevronRight size={16} stroke={1.5} />
+                        ) : null
+                      }
+                      active={activePage === item.value}
+                      onClick={() => {
+                        if (!item.disabled) {
+                          setActivePage(
+                            item.value as
+                              | "general"
+                              | "user-pools"
+                              | "wordpress-login"
+                              | "custom-fields"
+                              | "custom-providers"
+                              | "api-settings",
+                          );
+                        }
+                      }}
+                      disabled={item.disabled}
+                    />
+                  ))}
+                </Stack>
+              </Box>
+            </Stack>
+          </Card>
+        )}
+        <Box style={{ flex: 1, width: isMobile ? "100%" : "auto" }} maw={1020}>
+          {activePage === "user-pools" && (
+            <form name="user-pools" onSubmit={handleUpdateSettings}>
+              <Title order={2} mb="md">
+                User Pools
+              </Title>
+
+              <Text mb="md">
+                Connect your AWS Cognito user pool and app client here. This is
+                the foundation of your Gatey integration.
+              </Text>
+
+              <Tabs
+                className={classes["wpc-tabs"]}
+                value={currentConfig}
+                onChange={(value) =>
+                  setCurrentConfig(value as "default" | "secondary")
+                }
+              >
+                <Tabs.List>
+                  <Tabs.Tab
+                    value="default"
+                    leftSection={<IconStar size={16} />}
+                  >
+                    Default
+                  </Tabs.Tab>
+                  <Tabs.Tab
+                    value="secondary"
+                    leftSection={<IconCircleNumber2 size={16} />}
+                    disabled={!formConfig}
+                  >
+                    Secondary
+                    {!(formConfig ?? decryptedConfig)?.subscriptionType && (
+                      <IconLock
+                        size={14}
+                        stroke={1.5}
+                        style={{ marginLeft: "4px" }}
+                      />
+                    )}
+                  </Tabs.Tab>
+                </Tabs.List>
+              </Tabs>
+
+              <Stack gap="sm" p="md" bg="gray.1">
+                {currentConfig === "secondary" && (
+                  <TextInput
+                    disabled={savingSettings}
+                    name="secondaryUserPoolDomains"
+                    label={
+                      <InfoLabel
+                        text="User Pool Domains"
+                        scrollToId="user-pool-domains"
+                        onOpen={openInfo}
+                      />
+                    }
+                    description="Regular expression of domains for the secondary user pool"
+                    value={settingsFormData.secondaryUserPoolDomains}
+                    onChange={(e) =>
+                      setSettingsFormData({
+                        ...settingsFormData,
+                        secondaryUserPoolDomains: e.currentTarget.value!,
+                      })
+                    }
+                  />
+                )}
+
+                <TextInput
+                  disabled={savingSettings}
+                  name={
+                    (currentConfig === "default" ? "default" : "secondary") +
+                    ".Auth.Cognito.userPoolId"
+                  }
+                  label={
+                    <InfoLabel
+                      text="User Pool ID"
+                      scrollToId="user-pool-id"
+                      onOpen={openInfo}
+                    />
+                  }
+                  description="The ID of the AWS Cognito user pool to use"
+                  value={
+                    (currentConfig === "default"
+                      ? settingsFormData.userPoolConfigurations.default
+                      : settingsFormData.userPoolConfigurations.secondary
+                    )?.Auth?.Cognito?.userPoolId ?? ""
+                  }
+                  onChange={handleConfigChange}
+                />
+
+                <TextInput
+                  disabled={savingSettings}
+                  label={
+                    <InfoLabel
+                      text="App Client ID"
+                      scrollToId="app-client-id"
+                      onOpen={openInfo}
+                    />
+                  }
+                  description="The ID of the AWS Cognito app client to use"
+                  name={
+                    (currentConfig === "default" ? "default" : "secondary") +
+                    ".Auth.Cognito.userPoolClientId"
+                  }
+                  value={
+                    (currentConfig === "default"
+                      ? settingsFormData.userPoolConfigurations.default
+                      : settingsFormData.userPoolConfigurations.secondary
+                    )?.Auth?.Cognito?.userPoolClientId ?? ""
+                  }
+                  onChange={handleConfigChange}
+                />
+
+                <TextInput
+                  disabled={savingSettings}
+                  label={
+                    <InfoLabel
+                      text="Region"
+                      scrollToId="region"
+                      onOpen={openInfo}
+                    />
+                  }
+                  description="AWS region"
+                  name={
+                    (currentConfig === "default" ? "default" : "secondary") +
+                    ".API.GraphQL.region"
+                  }
+                  value={
+                    (currentConfig === "default"
+                      ? settingsFormData.userPoolConfigurations.default
+                      : settingsFormData.userPoolConfigurations.secondary
+                    )?.API?.GraphQL?.region ?? ""
+                  }
+                  onChange={handleConfigChange}
+                />
+
+                <TextInput
+                  disabled={savingSettings}
+                  label={
+                    <InfoLabel
+                      text="Identity Pool ID"
+                      scrollToId="identity-pool-id"
+                      onOpen={openInfo}
+                    />
+                  }
+                  description="The ID of the AWS Cognito identity pool to use"
+                  name={
+                    (currentConfig === "default" ? "default" : "secondary") +
+                    ".Auth.Cognito.identityPoolId"
+                  }
+                  value={
+                    (currentConfig === "default"
+                      ? settingsFormData.userPoolConfigurations.default
+                      : settingsFormData.userPoolConfigurations.secondary
+                    )?.Auth?.Cognito?.identityPoolId ?? ""
+                  }
+                  onChange={handleConfigChange}
+                />
+
+                <TextInput
+                  disabled={savingSettings}
+                  label={
+                    <InfoLabel
+                      text="OAuth Domain"
+                      scrollToId="oauth-domain"
+                      onOpen={openInfo}
+                    />
+                  }
+                  description="The domain of the OAuth provider to use"
+                  name={
+                    (currentConfig === "default" ? "default" : "secondary") +
+                    ".Auth.Cognito.loginWith.oauth.domain"
+                  }
+                  value={
+                    (currentConfig === "default"
+                      ? settingsFormData.userPoolConfigurations.default
+                      : settingsFormData.userPoolConfigurations.secondary
+                    )?.Auth?.Cognito?.loginWith?.oauth?.domain ?? ""
+                  }
+                  onChange={handleConfigChange}
+                />
+
+                <TextInput
+                  disabled={savingSettings}
+                  label={
+                    <InfoLabel
+                      text="OAuth scopes"
+                      scrollToId="oauth-scopes"
+                      onOpen={openInfo}
+                    />
+                  }
+                  description="The scopes to use for the OAuth provider"
+                  name={
+                    (currentConfig === "default" ? "default" : "secondary") +
+                    ".Auth.Cognito.loginWith.oauth.scopes"
+                  }
+                  value={
+                    (currentConfig === "default"
+                      ? settingsFormData.userPoolConfigurations.default
+                      : settingsFormData.userPoolConfigurations.secondary
+                    )?.Auth?.Cognito?.loginWith?.oauth?.scopes?.join(",") ?? ""
+                  }
+                  onChange={handleConfigChange}
+                />
+              </Stack>
+              <Group justify="flex-end" mt="lg">
+                <Button
+                  loading={savingSettings}
+                  variant="gradient"
+                  type="submit"
+                  leftSection={<IconCheck />}
+                >
+                  Save User Pool Settings
+                </Button>
+              </Group>
+            </form>
+          )}
+          {activePage === "general" && (
+            <form name="general" onSubmit={handleUpdateSettings}>
+              <Title order={2} mb="md">
+                General
+              </Title>
+
+              <Text mb="md">
+                Control how Gatey behaves across your site — including login
+                routing, redirect behavior, and display preferences.
+              </Text>
+
+              <Stack gap="sm">
+                <Fieldset
+                  legend={
+                    <InfoLabel
+                      text="Login Mechanisms"
+                      scrollToId="login-mechanisms"
+                      onOpen={openInfo}
+                    />
+                  }
+                  fw={500}
+                >
+                  <Checkbox
+                    disabled={savingSettings}
+                    label="Username"
+                    checked={settingsFormData.loginMechanisms?.includes(
+                      "username",
+                    )}
+                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
+                      // remove the current value from the array
+                      const loginMechanisms = [
+                        ...settingsFormData.loginMechanisms,
+                      ];
+                      const index = loginMechanisms.indexOf("username");
+                      if (!e.currentTarget.checked && index > -1) {
+                        loginMechanisms.splice(index, 1);
+                      } else if (e.currentTarget.checked && index === -1) {
+                        loginMechanisms.push("username");
+                      }
+                      setSettingsFormData({
+                        ...settingsFormData,
+                        loginMechanisms,
+                      });
+                    }}
+                  />
+                  <Checkbox
+                    disabled={savingSettings}
+                    label="Email"
+                    checked={settingsFormData.loginMechanisms?.includes(
+                      "email",
+                    )}
+                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
+                      // remove the current value from the array
+                      const loginMechanisms = [
+                        ...settingsFormData.loginMechanisms,
+                      ];
+                      const index = loginMechanisms.indexOf("email");
+                      if (!e.currentTarget.checked && index > -1) {
+                        loginMechanisms.splice(index, 1);
+                      } else if (e.currentTarget.checked && index === -1) {
+                        loginMechanisms.push("email");
+                      }
+                      setSettingsFormData({
+                        ...settingsFormData,
+                        loginMechanisms,
+                      });
+                    }}
+                  />
+                  <Checkbox
+                    disabled={savingSettings}
+                    label="Phone Number"
+                    checked={settingsFormData.loginMechanisms?.includes(
+                      "phone_number",
+                    )}
+                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
+                      // remove the current value from the array
+                      const loginMechanisms = [
+                        ...settingsFormData.loginMechanisms,
+                      ];
+                      const index = loginMechanisms.indexOf("phone_number");
+                      if (!e.currentTarget.checked && index > -1) {
+                        loginMechanisms.splice(index, 1);
+                      } else if (e.currentTarget.checked && index === -1) {
+                        loginMechanisms.push("phone_number");
+                      }
+                      setSettingsFormData({
+                        ...settingsFormData,
+                        loginMechanisms,
+                      });
+                    }}
+                  />
+                </Fieldset>
+                <MultiSelect
+                  label={
+                    <InfoLabel
+                      text="Sign-up Attributes"
+                      scrollToId="signup-attributes"
+                      onOpen={openInfo}
+                    />
+                  }
+                  placeholder="Select attributes"
+                  data={signUpAttributes}
+                  value={settingsFormData.signUpAttributes}
+                  onChange={(values: string[]) =>
+                    setSettingsFormData({
+                      ...settingsFormData,
+                      signUpAttributes: values as SignUpAttribute[],
+                    })
+                  }
+                  searchable
+                  hidePickedOptions
+                />
+                <Fieldset
+                  legend={
+                    <InfoLabel
+                      text="Social Providers"
+                      scrollToId="social-providers"
+                      onOpen={openInfo}
+                    />
+                  }
+                  fw={500}
+                >
+                  <Checkbox
+                    label="Google"
+                    checked={settingsFormData.socialProviders?.includes(
+                      "google",
+                    )}
+                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
+                      const socialProviders = settingsFormData.socialProviders
+                        ? [...settingsFormData.socialProviders]
+                        : [];
+                      const index = socialProviders.indexOf("google");
+                      if (!e.currentTarget.checked && index > -1) {
+                        socialProviders.splice(index, 1);
+                      } else if (e.currentTarget.checked && index === -1) {
+                        socialProviders.push("google");
+                      }
+                      setSettingsFormData({
+                        ...settingsFormData,
+                        socialProviders,
+                      });
+                    }}
+                  />
+                  <Checkbox
+                    label="Facebook"
+                    checked={settingsFormData.socialProviders?.includes(
+                      "facebook",
+                    )}
+                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
+                      const socialProviders = settingsFormData.socialProviders
+                        ? [...settingsFormData.socialProviders]
+                        : [];
+                      const index = socialProviders.indexOf("facebook");
+                      if (!e.currentTarget.checked && index > -1) {
+                        socialProviders.splice(index, 1);
+                      } else if (e.currentTarget.checked && index === -1) {
+                        socialProviders.push("facebook");
+                      }
+                      setSettingsFormData({
+                        ...settingsFormData,
+                        socialProviders,
+                      });
+                    }}
+                  />
+                  <Checkbox
+                    label="Apple"
+                    checked={settingsFormData.socialProviders?.includes(
+                      "apple",
+                    )}
+                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
+                      const socialProviders = settingsFormData.socialProviders
+                        ? [...settingsFormData.socialProviders]
+                        : [];
+                      const index = socialProviders.indexOf("apple");
+                      if (!e.currentTarget.checked && index > -1) {
+                        socialProviders.splice(index, 1);
+                      } else if (e.currentTarget.checked && index === -1) {
+                        socialProviders.push("apple");
+                      }
+                      setSettingsFormData({
+                        ...settingsFormData,
+                        socialProviders,
+                      });
+                    }}
+                  />
+                  <Checkbox
+                    label="Amazon"
+                    checked={settingsFormData.socialProviders?.includes(
+                      "amazon",
+                    )}
+                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
+                      const socialProviders = settingsFormData.socialProviders
+                        ? [...settingsFormData.socialProviders]
+                        : [];
+                      const index = socialProviders.indexOf("amazon");
+                      if (!e.currentTarget.checked && index > -1) {
+                        socialProviders.splice(index, 1);
+                      } else if (e.currentTarget.checked && index === -1) {
+                        socialProviders.push("amazon");
+                      }
+                      setSettingsFormData({
+                        ...settingsFormData,
+                        socialProviders,
+                      });
+                    }}
+                  />
+                </Fieldset>
+                <Fieldset
+                  legend={
+                    <InfoLabel
+                      text="Passwordless Settings"
+                      scrollToId="passwordless-settings"
+                      onOpen={openInfo}
+                    />
+                  }
+                  fw={500}
+                >
+                  <Stack gap="sm">
+                    <Text size="sm" c="dimmed">
+                      Configure available passwordless authentication methods
+                      and optional passkey registration prompts.
+                    </Text>
+                    <Box>
+                      <Text size="sm" fw={500} mb="xs">
+                        Hidden Auth Methods
+                      </Text>
+                      <Stack gap="xs">
+                        {authMethodOptions.map((option) => (
+                          <Checkbox
+                            key={option.value}
+                            disabled={savingSettings}
+                            label={option.label}
+                            checked={
+                              settingsFormData.passwordlessSettings?.hiddenAuthMethods?.includes(
+                                option.value,
+                              ) ?? false
+                            }
+                            onChange={(
+                              e: React.ChangeEvent<HTMLInputElement>,
+                            ) => {
+                              updatePasswordlessSettings((current) => {
+                                const hiddenAuthMethods =
+                                  current?.hiddenAuthMethods
+                                    ? [...current.hiddenAuthMethods]
+                                    : [];
+                                const index = hiddenAuthMethods.indexOf(
+                                  option.value,
+                                );
+
+                                if (!e.currentTarget.checked && index > -1) {
+                                  hiddenAuthMethods.splice(index, 1);
+                                } else if (
+                                  e.currentTarget.checked &&
+                                  index === -1
+                                ) {
+                                  hiddenAuthMethods.push(option.value);
+                                }
+
+                                return {
+                                  ...current,
+                                  hiddenAuthMethods,
+                                };
+                              });
+                            }}
+                          />
+                        ))}
+                      </Stack>
+                    </Box>
+                    <Select
+                      disabled={savingSettings}
+                      clearable
+                      label="Preferred Auth Method"
+                      placeholder="Use Amplify default"
+                      data={authMethodOptions}
+                      value={
+                        settingsFormData.passwordlessSettings
+                          ?.preferredAuthMethod ?? null
+                      }
+                      onChange={(value) => {
+                        updatePasswordlessSettings((current) => ({
+                          ...current,
+                          preferredAuthMethod:
+                            (value as AuthMethod | null) ?? undefined,
+                        }));
+                      }}
+                    />
+                    <Select
+                      disabled={savingSettings}
+                      clearable
+                      label="Passkey Registration Prompts"
+                      placeholder="Use Amplify default"
+                      data={[
+                        { label: "Enabled", value: "enabled" },
+                        { label: "Disabled", value: "disabled" },
+                        { label: "Custom", value: "custom" },
+                      ]}
+                      value={getPasskeyPromptMode(
+                        settingsFormData.passwordlessSettings
+                          ?.passkeyRegistrationPrompts,
+                      )}
+                      onChange={(value) => {
+                        updatePasswordlessSettings((current) => {
+                          switch (value) {
+                            case "enabled":
+                              return {
+                                ...current,
+                                passkeyRegistrationPrompts: true,
+                              };
+                            case "disabled":
+                              return {
+                                ...current,
+                                passkeyRegistrationPrompts: false,
+                              };
+                            case "custom":
+                              return {
+                                ...current,
+                                passkeyRegistrationPrompts:
+                                  typeof current?.passkeyRegistrationPrompts ===
+                                    "object" &&
+                                  current.passkeyRegistrationPrompts !== null
+                                    ? current.passkeyRegistrationPrompts
+                                    : {},
+                              };
+                            default:
+                              return {
+                                ...current,
+                                passkeyRegistrationPrompts: undefined,
+                              };
+                          }
+                        });
+                      }}
+                    />
+                    {getPasskeyPromptMode(
+                      settingsFormData.passwordlessSettings
+                        ?.passkeyRegistrationPrompts,
+                    ) === "custom" && (
+                      <Group grow align="flex-start">
+                        <Select
+                          disabled={savingSettings}
+                          clearable
+                          label="After Sign In"
+                          placeholder="Use Amplify default"
+                          data={passkeyPromptOptions}
+                          value={
+                            typeof settingsFormData.passwordlessSettings
+                              ?.passkeyRegistrationPrompts === "object"
+                              ? settingsFormData.passwordlessSettings
+                                  .passkeyRegistrationPrompts.afterSignin ??
+                                null
+                              : null
+                          }
+                          onChange={(value) => {
+                            updatePasswordlessSettings((current) => ({
+                              ...current,
+                              passkeyRegistrationPrompts: {
+                                ...(typeof current?.passkeyRegistrationPrompts ===
+                                  "object" &&
+                                current.passkeyRegistrationPrompts !== null
+                                  ? current.passkeyRegistrationPrompts
+                                  : {}),
+                                afterSignin:
+                                  (value as "ALWAYS" | "NEVER" | null) ??
+                                  undefined,
+                              },
+                            }));
+                          }}
+                        />
+                        <Select
+                          disabled={savingSettings}
+                          clearable
+                          label="After Sign Up"
+                          placeholder="Use Amplify default"
+                          data={passkeyPromptOptions}
+                          value={
+                            typeof settingsFormData.passwordlessSettings
+                              ?.passkeyRegistrationPrompts === "object"
+                              ? settingsFormData.passwordlessSettings
+                                  .passkeyRegistrationPrompts.afterSignup ??
+                                null
+                              : null
+                          }
+                          onChange={(value) => {
+                            updatePasswordlessSettings((current) => ({
+                              ...current,
+                              passkeyRegistrationPrompts: {
+                                ...(typeof current?.passkeyRegistrationPrompts ===
+                                  "object" &&
+                                current.passkeyRegistrationPrompts !== null
+                                  ? current.passkeyRegistrationPrompts
+                                  : {}),
+                                afterSignup:
+                                  (value as "ALWAYS" | "NEVER" | null) ??
+                                  undefined,
+                              },
+                            }));
+                          }}
+                        />
+                      </Group>
+                    )}
+                  </Stack>
+                </Fieldset>
+                <Switch.Group
+                  defaultValue={settingsFormData.hideSignUp ? ["hide"] : []}
+                  label={
+                    <InfoLabel
+                      text="Hide Sign Up"
+                      scrollToId="hide-sign-up"
+                      onOpen={openInfo}
+                    />
+                  }
+                  description="Hide the 'Sign Up' option in the login and sign-up forms."
+                  onChange={(values: string[]) =>
+                    setSettingsFormData({
+                      ...settingsFormData,
+                      hideSignUp: values.includes("hide"),
+                    })
+                  }
+                >
+                  <Switch label="Hide" value="hide" mt="xs" />
+                </Switch.Group>
+
+                <Select
+                  disabled={savingSettings}
+                  label={
+                    <InfoLabel
+                      text="Sign In Page"
+                      scrollToId="sign-in-page"
+                      onOpen={openInfo}
+                    />
+                  }
+                  description="The WordPress page to show when the user is not logged in"
+                  value={settingsFormData.signInPage}
+                  onChange={(value) =>
+                    setSettingsFormData({
+                      ...settingsFormData,
+                      signInPage: value!,
+                    })
+                  }
+                  data={pageOptions}
+                />
+                <Select
+                  disabled={savingSettings}
+                  label={
+                    <InfoLabel
+                      text="Default redirect after signing in"
+                      scrollToId="default-redirect-after-signing-in"
+                      onOpen={openInfo}
+                    />
+                  }
+                  description="The WordPress page to redirect to after the user signs in"
+                  value={settingsFormData.redirectSignIn}
+                  onChange={(value) =>
+                    setSettingsFormData({
+                      ...settingsFormData,
+                      redirectSignIn: value!,
+                    })
+                  }
+                  data={pageOptions}
+                />
+                <Select
+                  disabled={savingSettings}
+                  label={
+                    <InfoLabel
+                      text="Default redirect after signing out"
+                      scrollToId="default-redirect-after-signing-out"
+                      onOpen={openInfo}
+                    />
+                  }
+                  description="The WordPress page to redirect to after the user signs out"
+                  value={settingsFormData.redirectSignOut}
+                  onChange={(value) =>
+                    setSettingsFormData({
+                      ...settingsFormData,
+                      redirectSignOut: value!,
+                    })
+                  }
+                  data={pageOptions}
+                />
+                <TextInput
+                  disabled={savingSettings}
+                  label={
+                    <InfoLabel
+                      text="Custom Translations URL"
+                      scrollToId="custom-translations-url"
+                      onOpen={openInfo}
+                    />
+                  }
+                  description={
+                    <>
+                      <Text size="sm" m={0}>
+                        If you want to use custom translations, enter the URL
+                        here. The URL should point to a JSON file. Download{" "}
+                        <a
+                          href="https://wpsuite.io/static/plugins/gatey-translations.json"
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          download
+                        >
+                          sample translations
+                        </a>
+                        , modify it, and upload it to your server or a public
+                        file hosting service.
+                      </Text>
+                    </>
+                  }
+                  value={settingsFormData.customTranslationsUrl}
+                  onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
+                    setSettingsFormData({
+                      ...settingsFormData,
+                      customTranslationsUrl: e.target.value,
+                    })
+                  }
+                />
+                <Switch.Group
+                  defaultValue={
+                    settingsFormData.enablePoweredBy ? [] : ["hide"]
+                  }
+                  label={
+                    <InfoLabel
+                      text="Hide 'Powered by' attribution"
+                      scrollToId="hide-powered-by-gatey"
+                      onOpen={openInfo}
+                    />
+                  }
+                  description="Hide the 'Powered by' attribution in the login and sign-up forms."
+                  onChange={(values: string[]) =>
+                    setSettingsFormData({
+                      ...settingsFormData,
+                      enablePoweredBy: !values.includes("hide"),
+                    })
+                  }
+                >
+                  <Switch label="Hide" value="hide" mt="xs" />
+                </Switch.Group>
+
+                <Switch.Group
+                  defaultValue={
+                    settingsFormData.debugLoggingEnabled ? ["enable"] : []
+                  }
+                  label={
+                    <InfoLabel
+                      text={__("Enable Debug Logging", TEXT_DOMAIN)}
+                      scrollToId="enable-debug-logging"
+                      onOpen={openInfo}
+                    />
+                  }
+                  description={__(
+                    "Enable detailed debug logging for Gatey operations. Note: This requires WP_DEBUG and WP_DEBUG_LOG to be enabled in wp-config.php. Logs will appear in wp-content/debug.log.",
+                    TEXT_DOMAIN,
+                  )}
+                  onChange={(values: string[]) =>
+                    setSettingsFormData({
+                      ...settingsFormData,
+                      debugLoggingEnabled: values.includes("enable"),
+                    })
+                  }
+                >
+                  <Switch
+                    label={__("Enable", TEXT_DOMAIN)}
+                    value="enable"
+                    mt="xs"
+                    disabled={savingSettings}
+                  />
+                </Switch.Group>
+              </Stack>
+
+              <Group justify="flex-end" mt="lg">
+                <Button
+                  loading={savingSettings}
+                  variant="gradient"
+                  type="submit"
+                  leftSection={<IconCheck />}
+                >
+                  Save General Settings
+                </Button>
+              </Group>
+            </form>
+          )}
+          {activePage === "wordpress-login" && (
+            <form name="wordpress-login" onSubmit={handleUpdateSettings}>
+              <Title order={2} mb="md">
+                WordPress Login
+              </Title>
+
+              <Text mb="md">
+                Enable full WordPress login integration using Cognito. Assign
+                roles, override wp-login, and manage secure admin access.
+              </Text>
+
+              <Stack gap="sm">
+                <Checkbox
+                  disabled={savingSettings}
+                  label={
+                    <InfoLabel
+                      text="Integrate WordPress Login"
+                      scrollToId="integrate-wordpress-login"
+                      onOpen={openInfo}
+                    />
+                  }
+                  checked={settingsFormData.integrateWpLogin}
+                  onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
+                    handleIntegrationChange(e.currentTarget.checked)
+                  }
+                />
+                {settingsFormData.integrateWpLogin && (
+                  <>
+                    <NumberInput
+                      disabled={savingSettings}
+                      label={
+                        <InfoLabel
+                          text="Cookie expiration"
+                          scrollToId="cookie-expiration"
+                          onOpen={openInfo}
+                        />
+                      }
+                      description="The number of seconds the cookie should be valid for"
+                      value={settingsFormData.cookieExpiration}
+                      onChange={(value) =>
+                        setSettingsFormData({
+                          ...settingsFormData,
+                          cookieExpiration: +value,
+                        })
+                      }
+                    />
+                    {wpRolesLoaded && (
+                      <Box>
+                        <Title order={4} my="md">
+                          <InfoLabel
+                            text="Cognito Group to WordPress Role Mapping"
+                            scrollToId="cognito-group-to-wordpress-role-mapping"
+                            onOpen={openInfo}
+                          />
+                        </Title>
+                        <Table withTableBorder>
+                          <Table.Thead>
+                            <Table.Tr>
+                              <Table.Th>Cognito Group</Table.Th>
+                              <Table.Th>WordPress Role</Table.Th>
+                              <Table.Th></Table.Th>
+                            </Table.Tr>
+                          </Table.Thead>
+                          <Table.Tbody>
+                            {settingsFormData.mappings.map((mapping, index) => (
+                              <Table.Tr key={index}>
+                                <Table.Td>
+                                  <TextInput
+                                    disabled={savingSettings}
+                                    value={mapping.cognitoGroup}
+                                    onChange={(
+                                      e: React.ChangeEvent<HTMLInputElement>,
+                                    ) =>
+                                      handleMappingChange(
+                                        index,
+                                        "cognitoGroup",
+                                        e.target.value,
+                                      )
+                                    }
+                                  />
+                                </Table.Td>
+                                <Table.Td>
+                                  <Select
+                                    disabled={savingSettings}
+                                    value={mapping.wordpressRole}
+                                    onChange={(value) =>
+                                      handleMappingChange(
+                                        index,
+                                        "wordpressRole",
+                                        value!,
+                                      )
+                                    }
+                                    data={wpRoles}
+                                  />
+                                </Table.Td>
+                                <Table.Td>
+                                  <ActionIcon
+                                    disabled={savingSettings}
+                                    variant="subtle"
+                                    color="red"
+                                    onClick={() => handleDeleteMapping(index)}
+                                  >
+                                    <IconX
+                                      style={{
+                                        width: "70%",
+                                        height: "70%",
+                                      }}
+                                      stroke={1.5}
+                                    />
+                                  </ActionIcon>
+                                </Table.Td>
+                              </Table.Tr>
+                            ))}
+                          </Table.Tbody>
+                        </Table>
+
+                        <Box ta="center">
+                          <Button
+                            disabled={savingSettings}
+                            variant="subtle"
+                            size="compact-xs"
+                            leftSection={<IconPlus size={14} />}
+                            w="100%"
+                            mt="0.3rem"
+                            onClick={handleAddMapping}
+                          >
+                            Add Mapping
+                          </Button>
+                        </Box>
+                      </Box>
+                    )}
+                  </>
+                )}
+              </Stack>
+              <Group justify="flex-end" mt="lg">
+                <Button
+                  loading={savingSettings}
+                  variant="gradient"
+                  type="submit"
+                  leftSection={<IconCheck />}
+                >
+                  Save WordPress Login Settings
+                </Button>
+              </Group>
+            </form>
+          )}
+          {activePage === "api-settings" && (
+            <>
+              <Title order={2} mb="md">
+                <InfoLabel
+                  text="API Settings"
+                  scrollToId="api-settings"
+                  onOpen={openInfo}
+                />
+              </Title>
+
+              <Text mb="md">
+                Define secure API endpoints that your frontend can call via
+                Gatey.cognito. Choose API name, authorization, and endpoint URL,
+                then configure sign-in and sign-up hooks.
+              </Text>
+
+              {(formConfig ?? decryptedConfig)?.subscriptionType !==
+                "PROFESSIONAL" && (
+                <Alert
+                  variant="light"
+                  color="yellow"
+                  title="PRO Feature"
+                  icon={<IconExclamationCircle />}
+                  mb="md"
+                >
+                  This feature is available in the <strong>PRO</strong> version
+                  of the plugin. You can save your settings but they will not
+                  take effect until you upgrade your subscription.
+                </Alert>
+              )}
+              <Suspense fallback={<Text>Loading...</Text>}>
+                {(formConfig ?? decryptedConfig) && (
+                  <ApiSettingsEditor
+                    apiUrl={apiUrl}
+                    config={formConfig ?? decryptedConfig}
+                    accountId={accountId!}
+                    siteId={siteId!}
+                    siteKey={siteKey!}
+                    onSave={handleConfigSave}
+                    InfoLabel={InfoLabel}
+                    openInfo={openInfo}
+                  />
+                )}
+              </Suspense>
+            </>
+          )}
+          {activePage === "custom-fields" && (
+            <>
+              <Title order={2} mb="md">
+                <InfoLabel
+                  text="Custom Fields"
+                  scrollToId="custom-fields"
+                  onOpen={openInfo}
+                />
+              </Title>
+
+              <Text mb="md">
+                Manage and configure custom form fields for both the admin
+                screens and the front-end.
+              </Text>
+
+              {!(formConfig ?? decryptedConfig)?.subscriptionType && (
+                <Alert
+                  variant="light"
+                  color="yellow"
+                  title="PRO Feature"
+                  icon={<IconExclamationCircle />}
+                  mb="md"
+                >
+                  This feature is available in the <strong>PRO</strong> version
+                  of the plugin. You can save your settings but they will not
+                  take effect until you upgrade your subscription.
+                </Alert>
+              )}
+              <Suspense fallback={<Text>Loading...</Text>}>
+                {(formConfig ?? decryptedConfig) && (
+                  <CustomFieldsEditor
+                    apiUrl={apiUrl}
+                    config={formConfig ?? decryptedConfig}
+                    accountId={accountId!}
+                    siteId={siteId!}
+                    siteKey={siteKey!}
+                    onSave={handleConfigSave}
+                    InfoLabel={InfoLabel}
+                    openInfo={openInfo}
+                  />
+                )}
+              </Suspense>
+            </>
+          )}
+          {activePage === "custom-providers" && (
+            <>
+              <Title order={2} mb="md">
+                <InfoLabel
+                  text="Custom Providers"
+                  scrollToId="custom-providers"
+                  onOpen={openInfo}
+                />
+              </Title>
+
+              <Text mb="md">
+                Enable the custom login providers shown on the sign-in and
+                sign-up screens.
+              </Text>
+
+              {(formConfig ?? decryptedConfig)?.subscriptionType !==
+                "PROFESSIONAL" && (
+                <Alert
+                  variant="light"
+                  color="yellow"
+                  title="PRO Feature"
+                  icon={<IconExclamationCircle />}
+                  mb="md"
+                >
+                  This feature is available in the <strong>PRO</strong> version
+                  of the plugin. You can save your settings but they will not
+                  take effect until you upgrade your subscription.
+                </Alert>
+              )}
+              <Suspense fallback={<Text>Loading...</Text>}>
+                {(formConfig ?? decryptedConfig) && (
+                  <CustomProvidersEditor
+                    apiUrl={apiUrl}
+                    config={formConfig ?? decryptedConfig}
+                    accountId={accountId!}
+                    siteId={siteId!}
+                    siteKey={siteKey!}
+                    onSave={handleConfigSave}
+                    InfoLabel={InfoLabel}
+                    openInfo={openInfo}
+                  />
+                )}
+              </Suspense>
+            </>
+          )}
+        </Box>
+      </Group>
+    </div>
+  );
+};
+
+async function fetchSite(accountId: string, siteId: string, siteKey: string) {
+  try {
+    const response = await fetch(
+      `${apiUrl}/account/${accountId}/site/${siteId}/settings`,
+      {
+        method: "GET",
+        headers: {
+          "X-Plugin": "gatey",
+          "X-Site-Key": siteKey,
+        },
+      },
+    );
+
+    if (!response.ok) {
+      throw new Error(`Failed to fetch site: ${response.statusText}`);
+    }
+
+    const body = await response.json();
+    return body as unknown as Site;
+  } catch (err) {
+    console.error("fetchSite error:", err);
+    throw err;
+  }
+}
+
+export default Main;

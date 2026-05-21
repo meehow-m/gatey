@@ -1,0 +1,62 @@
+{
+  "$schema": "https://schemas.wp.org/trunk/block.json",
+  "apiVersion": 3,
+  "name": "gatey/authenticator",
+  "version": "2.3.0",
+  "title": "Authenticator",
+  "category": "smartcloud-gatey",
+  "description": "Gatey Authenticator - add authentication screens to your site",
+  "attributes": {
+    "screen": {
+      "type": "string",
+      "default": "signIn"
+    },
+    "variation": {
+      "type": "string"
+    },
+    "colorMode": {
+      "type": "string"
+    },
+    "showOpenButton": {
+      "type": "boolean"
+    },
+    "openButtonTitle": {
+      "type": "string"
+    },
+    "signingInMessage": {
+      "type": "string"
+    },
+    "signingOutMessage": {
+      "type": "string"
+    },
+    "redirectingMessage": {
+      "type": "string"
+    },
+    "language": {
+      "type": "string"
+    },
+    "direction": {
+      "type": "string"
+    },
+    "totpIssuer": {
+      "type": "string"
+    },
+    "uid": {
+      "type": "string"
+    }
+  },
+  "supports": {
+    "inserter": true,
+    "align": true,
+    "html": false,
+    "shadow": true,
+    "spacing": { "margin": true, "padding": true }
+  },
+  "allowedBlocks": ["gatey/custom-block"],
+  "textdomain": "gatey",
+  "editorScript": "smartcloud-gatey-blocks-editor-script",
+  "editorStyle": "smartcloud-gatey-blocks-editor-style",
+  "render": "file:./render.php",
+  "viewScript": "smartcloud-gatey-view-script",
+  "viewStyle": "smartcloud-gatey-view-style"
+}

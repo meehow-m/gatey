@@ -1,0 +1,93 @@
+{
+  "$schema": "https://schemas.wp.org/trunk/block.json",
+  "apiVersion": 3,
+  "name": "gatey/account-attribute",
+  "version": "2.3.0",
+  "title": "Account Attribute",
+  "category": "smartcloud-gatey",
+  "description": "Account Attribute for Gatey Authenticator - display an attribute of the current user",
+  "attributes": {
+    "component": {
+      "type": "string"
+    },
+    "attribute": {
+      "type": "string"
+    },
+    "custom": {
+      "type": "string"
+    },
+    "colorMode": {
+      "type": "string"
+    },
+    "language": {
+      "type": "string"
+    },
+    "direction": {
+      "type": "string"
+    },
+    "link": {
+      "type": "object",
+      "default": {
+        "url": "",
+        "opensInNewTab": false,
+        "nofollow": false
+      }
+    },
+    "prefix": {
+      "type": "string"
+    },
+    "postfix": {
+      "type": "string"
+    }
+  },
+  "textdomain": "gatey",
+  "editorScript": "smartcloud-gatey-blocks-editor-script",
+  "editorStyle": "smartcloud-gatey-blocks-editor-style",
+  "render": "file:./render.php",
+  "viewScript": "smartcloud-gatey-view-script",
+  "viewStyle": "smartcloud-gatey-view-style",
+  "supports": {
+    "align": true,
+    "__experimentalBorder": {
+      "color": true,
+      "style": true,
+      "width": true,
+      "radius": true
+    },
+    "html": true,
+    "shadow": true,
+    "spacing": {
+      "margin": true,
+      "padding": true,
+      "__experimentalDefaultControls": {
+        "margin": false,
+        "padding": false
+      }
+    },
+    "dimensions": { "minHeight": true },
+    "typography": {
+      "fontSize": true,
+      "lineHeight": true,
+      "textAlign": true,
+      "__experimentalFontFamily": true,
+      "__experimentalTextDecoration": true,
+      "__experimentalFontStyle": true,
+      "__experimentalFontWeight": true,
+      "__experimentalLetterSpacing": true,
+      "__experimentalTextTransform": true,
+      "__experimentalWritingMode": true,
+      "__experimentalDefaultControls": {
+        "fontSize": true
+      }
+    },
+    "color": {
+      "background": true,
+      "text": true,
+      "gradients": true,
+      "__experimentalDefaultControls": {
+        "background": true,
+        "text": true
+      }
+    }
+  }
+}
