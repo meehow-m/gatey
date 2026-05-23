@@ -24,6 +24,7 @@ import {
   getGateyPlugin,
   getStoreDispatch,
   getStoreSelect,
+  login,
   type Account,
   type AuthenticatorConfig,
 } from "@smart-cloud/gatey-core";
@@ -137,11 +138,13 @@ export const Login = (
     reloadUserAttributes,
     reloadMFAPreferences,
     setSignedIn,
+    setNextUrl,
   }: {
     clearAccount: () => void;
     reloadUserAttributes: () => void;
     reloadMFAPreferences: () => void;
     setSignedIn: (signedIn: boolean) => void;
+    setNextUrl: (nextUrl: string | undefined | null) => void;
   } = getStoreDispatch(store);
 
   const params = new URLSearchParams(window.location.search);
@@ -390,26 +393,13 @@ export const Login = (
           dispatchEvent("signing-in");
         } else {
           dispatchEvent("signed-in");
-
-          let url =
-            redirectTo ||
-            nextUrl ||
-            gatey.settings.redirectSignIn ||
-            gatey.settings.signInPage;
-          // prevent redirect loop
-          if (url?.endsWith("/")) {
-            url = url.substring(0, url.length - 1);
-          }
-          let path = location.pathname;
-          if (path.endsWith("/")) {
-            path = path.substring(0, path.length - 1);
-          }
-          if (url && url !== path + location.search) {
-            setRedirecting(true);
-            window.location.assign(url);
-          } else {
-            setLoginHandled(true);
-          }
+          setLoginHandled(true);
+          setMessage(signingInMessage);
+          login(config?.apiConfigurations?.default?.signInHook).then(
+            (nextUrl) => {
+              setNextUrl(nextUrl ?? null);
+            },
+          );
         }
       });
     }
@@ -425,6 +415,8 @@ export const Login = (
     loginHandled,
     nextUrl,
     signingInMessage,
+    setNextUrl,
+    config?.apiConfigurations?.default?.signInHook,
   ]);
 
   useEffect(() => {
